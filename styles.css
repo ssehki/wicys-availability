@@ -156,6 +156,43 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .tgrid.group .c.hot { outline: 2px solid var(--text); outline-offset: -2px; }
 .tgrid .c.best { box-shadow: inset 0 0 0 2px var(--mine); }
 
+/* Date list on the create form */
+.date-list { display: flex; flex-direction: column; gap: 8px; }
+.date-row { display: flex; gap: 8px; align-items: center; }
+.date-row input { flex: 1; }
+
+/* Tap-to-pick time buttons */
+.hint { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--mine-soft); font-size: .9rem; }
+.picker, .group-list { display: flex; flex-direction: column; gap: 18px; }
+.day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.day-tools { display: inline-flex; gap: 10px; align-items: baseline; }
+.link-btn { font: inherit; font-size: .85rem; background: none; border: 0; padding: 0; color: var(--primary); cursor: pointer; text-decoration: underline; }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; user-select: none; -webkit-user-select: none; }
+.slot {
+  font: inherit; font-size: .88rem; font-weight: 500; cursor: pointer; padding: 10px 4px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  transition: background .1s, border-color .1s;
+}
+.slot:hover { border-color: var(--mine); }
+.slot.on { background: var(--mine); border-color: var(--mine); color: #fff; font-weight: 600; }
+.slot.on::before { content: "✓ "; }
+
+/* Group list: one row per time with a bar */
+.glist { display: flex; flex-direction: column; gap: 3px; }
+.grow {
+  display: grid; grid-template-columns: 74px 1fr 40px; align-items: center; gap: 10px;
+  font: inherit; font-size: .85rem; text-align: left; color: var(--text);
+  background: none; border: 0; border-radius: 6px; padding: 3px 4px; cursor: pointer;
+}
+.grow:hover, .grow.hot { background: var(--surface-2); }
+.grow.zero { color: var(--muted); }
+.grow .t { white-space: nowrap; }
+.grow .n { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.grow .bar { height: 14px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.grow .fill { display: block; height: 100%; width: 0; background: rgb(var(--heat-rgb)); border-radius: 4px; transition: width .2s; }
+.grow .fill.all { background: var(--mine); }
+.grow.best { box-shadow: inset 0 0 0 2px var(--mine); }
+
 .who {
   min-height: 72px; font-size: .88rem; background: var(--surface-2); border-radius: 10px; padding: 10px 12px;
 }

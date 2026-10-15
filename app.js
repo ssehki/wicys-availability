@@ -128,7 +128,6 @@
   function renderHome() {
     document.title = 'WiCyS Eboard Availability';
     const today = new Date();
-    const plus6 = new Date(today); plus6.setDate(today.getDate() + 6);
     const hourOpts = (sel) => Array.from({ length: 25 }, (_, h) =>
       `<option value="${h * 60}" ${h * 60 === sel ? 'selected' : ''}>${h === 24 ? '12 AM (midnight)' : fmtTime(h * 60, true)}</option>`).join('');
 
@@ -136,7 +135,7 @@
       <div class="stack">
         <div>
           <h1>Find a time that works</h1>
-          <p class="muted">Make a poll, drop the link in the gc, and everyone paints the times they're free. The best times show up automatically.</p>
+          <p class="muted">Make a poll, drop the link in the gc, and everyone taps the times they're free. The best times show up automatically.</p>
         </div>
         <div class="grid-2">
           <form class="card stack" id="create">
@@ -148,14 +147,14 @@
             <div>
               <label>Which days?</label>
               <div class="seg" role="group" aria-label="Poll type">
-                <button type="button" data-mode="dates" aria-pressed="true">Specific dates</button>
-                <button type="button" data-mode="weekly" aria-pressed="false">Days of the week</button>
+                <button type="button" data-mode="dates" aria-pressed="true">Pick a date</button>
+                <button type="button" data-mode="weekly" aria-pressed="false">Weekly</button>
               </div>
               <p class="muted small" id="mode-hint" style="margin:6px 0 0">For a one-time meeting or event.</p>
             </div>
-            <div class="row" id="dates-fields">
-              <div class="field"><label for="from">From</label><input type="date" id="from" value="${isoDate(today)}"></div>
-              <div class="field"><label for="to">To</label><input type="date" id="to" value="${isoDate(plus6)}"></div>
+            <div id="dates-fields" class="stack">
+              <div id="date-list" class="date-list"></div>
+              <div><button type="button" class="btn ghost sm" id="add-date">+ Add another date</button></div>
             </div>
             <div id="weekly-fields" hidden>
               <div class="chips">${WEEKDAYS.map((d, i) => `<button type="button" class="chip" data-wd="${d}" aria-pressed="${i < 5}">${d}</button>`).join('')}</div>
@@ -187,6 +186,28 @@
     form.querySelectorAll('[data-wd]').forEach((b) => b.addEventListener('click', () =>
       b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true')));
 
+    // One date by default; "+ Add another date" for the occasional multi-day poll.
+    const dateList = form.querySelector('#date-list');
+    const addDate = (value) => {
+      const row = document.createElement('div');
+      row.className = 'date-row';
+      const n = dateList.children.length + 1;
+      row.innerHTML = `<input type="date" aria-label="Date ${n}" value="${value || ''}">` +
+        (n > 1 ? '<button type="button" class="btn subtle sm" aria-label="Remove this date">✕</button>' : '');
+      const rm = row.querySelector('button');
+      if (rm) rm.addEventListener('click', () => row.remove());
+      dateList.appendChild(row);
+      return row.querySelector('input');
+    };
+    addDate(isoDate(today));
+    form.querySelector('#add-date').addEventListener('click', () => {
+      const inputs = dateList.querySelectorAll('input');
+      const last = inputs[inputs.length - 1].value;
+      let next = '';
+      if (last) { const d = parseDate(last); d.setDate(d.getDate() + 1); next = isoDate(d); }
+      addDate(next).focus();
+    });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = form.querySelector('#create-err');
@@ -198,13 +219,9 @@
       if (end <= start) return fail('The end time needs to be after the start time.');
       let days;
       if (mode === 'dates') {
-        const from = form.querySelector('#from').value, to = form.querySelector('#to').value;
-        if (!from || !to) return fail('Pick a start and end date.');
-        const d0 = parseDate(from), d1 = parseDate(to);
-        if (d1 < d0) return fail('The end date is before the start date.');
-        days = [];
-        for (const d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) days.push(isoDate(d));
-        if (days.length > 31) return fail('Keep it to 31 days or fewer.');
+        days = [...new Set([...dateList.querySelectorAll('input')].map((i) => i.value).filter(Boolean))].sort();
+        if (!days.length) return fail('Pick a date.');
+        if (days.length > 31) return fail('Keep it to 31 dates or fewer.');
       } else {
         days = [...form.querySelectorAll('[data-wd][aria-pressed=true]')].map((b) => b.dataset.wd);
         if (!days.length) return fail('Pick at least one day.');
@@ -227,7 +244,7 @@
       if (!list.length) { el.innerHTML = '<p class="muted">No polls yet. Make the first one!</p>'; return; }
       el.innerHTML = `<ul class="poll-list">${list.map(([id, p]) => {
         const n = Object.keys(p.responses || {}).length;
-        const when = p.meta.mode === 'weekly' ? 'Weekly' : `${dayLong(p.meta, p.meta.days[0])} – ${dayLong(p.meta, p.meta.days[p.meta.days.length - 1])}`;
+        const when = p.meta.mode === 'weekly' ? 'Weekly' : p.meta.days.map((d) => dayLong(p.meta, d)).join(', ');
         return `<li><a href="?p=${encodeURIComponent(id)}" data-nav><span><strong>${esc(p.meta.title)}</strong><br><span class="muted small">${esc(when)}</span></span><span class="muted small">${n} ${n === 1 ? 'response' : 'responses'}</span></a></li>`;
       }).join('')}</ul>`;
     });
@@ -267,7 +284,7 @@
         ? ` <span class="error">(your device is set to ${esc(myTz().replace(/_/g, ' '))})</span>` : '';
       const span = meta.mode === 'weekly'
         ? meta.days.join(', ')
-        : `${dayLong(meta, meta.days[0])} – ${dayLong(meta, meta.days[D - 1])}`;
+        : meta.days.map((d) => dayLong(meta, d)).join(', ');
 
       $app.innerHTML = `
         <div class="stack">
@@ -288,8 +305,8 @@
                 <h2>Group availability</h2>
                 <div class="legend" id="legend"></div>
               </div>
-              <div class="scroller"><div class="tgrid group" id="group"></div></div>
-              <div class="who" id="who"><span class="muted">Hover or tap a time to see who's free.</span></div>
+              <div class="who" id="who"><span class="muted">Tap a time to see who's free.</span></div>
+              <div id="group" class="group-list"></div>
             </section>
           </div>
           <section class="card stack">
@@ -319,7 +336,7 @@
       });
       $app.querySelector('#minlen').addEventListener('change', (e) => { minLen = +e.target.value; refreshGroup(); });
 
-      buildGrid($app.querySelector('#group'));
+      buildGroupList($app.querySelector('#group'));
       wireGroup();
 
       const saved = ls.get('wicys-name-' + id) || null;
@@ -357,14 +374,13 @@
           <h2>Your availability</h2>
           <span class="save-state" id="save-state"></span>
         </div>
-        <p class="muted small" style="margin:4px 0 0">Filling in as <strong>${esc(name)}</strong> · <a href="#" id="switch">not you?</a><br>Click and drag to mark when you're free. Drag over green to erase.</p>
-        <div class="scroller"><div class="tgrid mine" id="mine"></div></div>
+        <p class="muted small" style="margin:4px 0 0">Filling in as <strong>${esc(name)}</strong> · <a href="#" id="switch">not you?</a></p>
+        <p class="hint">Tap <strong>every</strong> time you're free. Pick as many as you want. Tap again to undo.<br><span class="muted small">Each button is a ${meta.step}-minute block starting at that time. It saves automatically.</span></p>
+        <div id="mine" class="picker"></div>
         <div class="row">
-          <button class="btn subtle sm" id="all">I'm free all of these</button>
-          <button class="btn subtle sm" id="clear">Clear</button>
-          <button class="btn ghost sm" id="remove" style="margin-left:auto">Remove my response</button>
+          <button class="btn ghost sm" id="remove">Remove my response</button>
         </div>`;
-      buildGrid(card.querySelector('#mine'));
+      buildPicker(card.querySelector('#mine'));
       loadMine();
       wireMine();
       card.querySelector('#switch').addEventListener('click', (e) => {
@@ -372,8 +388,6 @@
         me = null; mine = null; ls.set('wicys-name-' + id, '');
         renderNameForm();
       });
-      card.querySelector('#all').addEventListener('click', () => { mine.fill(1); paintMine(); queueSave(); });
-      card.querySelector('#clear').addEventListener('click', () => { mine.fill(0); paintMine(); queueSave(); });
       card.querySelector('#remove').addEventListener('click', async () => {
         if (!confirm('Remove your response from this poll?')) return;
         clearTimeout(saveTimer); dirty = false;
@@ -394,37 +408,52 @@
 
     function paintMine() {
       const g = $app.querySelector('#mine'); if (!g || !mine) return;
-      g.querySelectorAll('.c').forEach((c) => c.classList.toggle('on', mine[+c.dataset.i] === 1));
+      g.querySelectorAll('.c').forEach((c) => {
+        const on = mine[+c.dataset.i] === 1;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-pressed', on);
+      });
+      g.querySelectorAll('[data-count]').forEach((el) => {
+        const d = +el.dataset.count;
+        let k = 0; for (let s = 0; s < S; s++) k += mine[d * S + s];
+        el.textContent = k ? `${k} picked` : '';
+      });
     }
 
     function wireMine() {
       const g = $app.querySelector('#mine');
-      let drag = null; // { d0, s0, val, snap }
-      const cellAt = (e) => {
-        const el = document.elementFromPoint(e.clientX, e.clientY);
-        return el && el.closest && el.closest('#mine .c');
-      };
-      const apply = (c) => {
-        const d1 = +c.dataset.d, s1 = +c.dataset.s;
-        mine.set(drag.snap);
-        for (let d = Math.min(drag.d0, d1); d <= Math.max(drag.d0, d1); d++)
-          for (let s = Math.min(drag.s0, s1); s <= Math.max(drag.s0, s1); s++) mine[d * S + s] = drag.val;
-        paintMine();
-      };
+      // Tap (or click) toggles one time. With a mouse you can also hold and sweep across several.
+      let drag = null, suppressClick = false;
+      const set = (c, val) => { mine[+c.dataset.i] = val; paintMine(); };
       g.addEventListener('pointerdown', (e) => {
+        suppressClick = false;
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
         const c = e.target.closest('.c'); if (!c) return;
         e.preventDefault();
-        drag = { d0: +c.dataset.d, s0: +c.dataset.s, val: mine[+c.dataset.i] ? 0 : 1, snap: mine.slice() };
-        dirty = true;
-        apply(c);
+        drag = { val: mine[+c.dataset.i] ? 0 : 1 };
+        dirty = true; suppressClick = true;
+        set(c, drag.val);
       });
-      const move = (e) => { if (!drag) return; const c = cellAt(e); if (c) apply(c); };
+      g.addEventListener('pointerover', (e) => {
+        if (!drag) return;
+        const c = e.target.closest('.c'); if (c) set(c, drag.val);
+      });
+      g.addEventListener('click', (e) => {
+        const day = e.target.closest('[data-day-all], [data-day-none]');
+        if (day) {
+          const d = +(day.dataset.dayAll ?? day.dataset.dayNone);
+          mine.fill(day.dataset.dayAll !== undefined ? 1 : 0, d * S, (d + 1) * S);
+          paintMine(); queueSave(); return;
+        }
+        const c = e.target.closest('.c'); if (!c) return;
+        if (suppressClick) { suppressClick = false; return; }
+        set(c, mine[+c.dataset.i] ? 0 : 1);
+        queueSave();
+      });
       const up = () => { if (!drag) return; drag = null; queueSave(); };
-      window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
-      window.addEventListener('pointercancel', up);
       const prev = cleanup;
-      cleanup = () => { prev(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+      cleanup = () => { prev(); window.removeEventListener('pointerup', up); };
     }
 
     function queueSave() {
@@ -450,20 +479,36 @@
       }
     }
 
-    // --- shared grid markup ---
-    function buildGrid(el) {
-      el.style.gridTemplateColumns = `auto repeat(${D}, minmax(44px, 1fr))`;
-      let html = '<div></div>';
-      meta.days.forEach((day) => { const l = dayLabel(meta, day); html += `<div class="dh">${esc(l.top)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</div>`; });
-      for (let s = 0; s < S; s++) {
-        const t = meta.start + s * meta.step;
-        const onHour = t % 60 === 0;
-        html += `<div class="th">${onHour ? fmtTime(t, true) : ''}</div>`;
-        for (let d = 0; d < D; d++) {
-          html += `<div class="c${onHour ? ' hr' : ''}${s === S - 1 ? ' last' : ''}" data-d="${d}" data-s="${s}" data-i="${d * S + s}"></div>`;
-        }
-      }
-      el.innerHTML = html;
+    // --- markup: one block per day ---
+    const cellAttrs = (d, s) => `data-d="${d}" data-s="${s}" data-i="${d * S + s}"`;
+
+    function buildPicker(el) {
+      el.innerHTML = meta.days.map((day, d) => `
+        <div class="day-block">
+          <div class="day-head">
+            <strong>${esc(dayLong(meta, day))}</strong>
+            <span class="day-tools"><span class="muted small" data-count="${d}"></span>
+              <button type="button" class="link-btn" data-day-all="${d}">Select all</button>
+              <button type="button" class="link-btn" data-day-none="${d}">Clear</button></span>
+          </div>
+          <div class="slots">${Array.from({ length: S }, (_, s) =>
+            `<button type="button" class="slot c" aria-pressed="false" ${cellAttrs(d, s)}>${fmtTime(meta.start + s * meta.step)}</button>`).join('')}
+          </div>
+        </div>`).join('');
+    }
+
+    function buildGroupList(el) {
+      el.innerHTML = meta.days.map((day, d) => `
+        <div class="day-block">
+          ${D > 1 ? `<div class="day-head"><strong>${esc(dayLong(meta, day))}</strong></div>` : ''}
+          <div class="glist">${Array.from({ length: S }, (_, s) =>
+            `<button type="button" class="grow c" ${cellAttrs(d, s)}>
+               <span class="t">${fmtTime(meta.start + s * meta.step)}</span>
+               <span class="bar"><span class="fill"></span></span>
+               <span class="n"></span>
+             </button>`).join('')}
+          </div>
+        </div>`).join('');
     }
 
     // --- group view ---
@@ -491,17 +536,14 @@
       const g = $app.querySelector('#group');
       g.querySelectorAll('.c').forEach((c) => {
         const k = counts[+c.dataset.i];
-        c.style.background = k && n ? `rgba(var(--heat-rgb), ${0.12 + 0.88 * (k / n)})` : '';
-        c.title = n ? `${k}/${n} free` : '';
+        const fill = c.querySelector('.fill');
+        fill.style.width = n ? `${(k / n) * 100}%` : '0';
+        fill.classList.toggle('all', n > 0 && k === n);
+        c.querySelector('.n').textContent = n ? `${k}/${n}` : '';
+        c.classList.toggle('zero', !k);
       });
 
-      const legend = $app.querySelector('#legend');
-      legend.innerHTML = n
-        ? `<span>0/${n}</span><span class="scale">${Array.from({ length: Math.min(n, 8) + 1 }, (_, i) => {
-            const f = i / Math.min(n, 8);
-            return `<span style="background:${f ? `rgba(var(--heat-rgb), ${0.12 + 0.88 * f})` : 'var(--cell-empty)'}"></span>`;
-          }).join('')}</span><span>${n}/${n} free</span>`
-        : '';
+      $app.querySelector('#legend').textContent = n ? `${n} ${n === 1 ? 'person' : 'people'} so far` : '';
 
       const pe = $app.querySelector('#people');
       pe.innerHTML = all.length
