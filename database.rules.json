@@ -1,0 +1,21 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "polls": {
+      ".read": true,
+      "$poll": {
+        "meta": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['title', 'days', 'start', 'end', 'step']) && newData.child('title').isString() && newData.child('title').val().length <= 100"
+        },
+        "responses": {
+          "$who": {
+            ".write": "root.child('polls').child($poll).child('meta').exists()",
+            ".validate": "!newData.exists() || (newData.hasChildren(['name', 'slots']) && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('slots').isString() && newData.child('slots').val().length <= 4000)"
+          }
+        }
+      }
+    }
+  }
+}
